@@ -1,180 +1,84 @@
 package controllers
 
 import (
-	"context"
-	c "document-service/config"
+	"document-service/helper"
 	"document-service/models"
-	m "document-service/models"
-	"errors"
-	"log"
-	"os"
+	"document-service/services"
+	"net/http"
 
-	"go.mongodb.org/mongo-driver/bson"
+	"github.com/gin-gonic/gin"
 )
 
-func GetAll(userID uint64) ([]m.Folder, []m.Documents) {
-	client := c.MongoInit()
-	ctx := context.Background()
-	defer client.Disconnect(ctx)
-	cursorFolder := client.Database(os.Getenv("MONGO_DNS")).Collection("folder")
-	listFolder, err := cursorFolder.Find(ctx, bson.M{
-		"$or": []interface{}{
-			bson.M{"ispublic": true},
-			bson.M{"ownerid": userID},
-			bson.M{"share": bson.M{"$in": []uint64{userID}}},
-		},
-	})
+func GetAll(c *gin.Context) {
+	httpStatus := http.StatusOK
 
-	if err != nil {
-		log.Fatal(err.Error())
+	folderList, documentList := services.GetAll(models.UserToken.UserID)
+	var result []interface{}
+	for _, resFolder := range folderList {
+		result = append(result, resFolder)
 	}
-	defer listFolder.Close(ctx)
+	for _, resDocument := range documentList {
+		result = append(result, resDocument)
+	}
+	res := helper.Response(false, "", result)
+	c.JSON(httpStatus, res)
+}
 
-	var resultF []models.Folder
-	for listFolder.Next(ctx) {
-		var row models.Folder
-		if err := listFolder.Decode(&row); err != nil {
-			log.Fatal(err.Error())
+func SetFolder(c *gin.Context) {
+	var req models.Folder
+	if err := c.ShouldBindJSON(&req); err != nil {
+		res := helper.Response(true, err.Error(), map[string]interface{}{})
+		c.JSON(http.StatusUnprocessableEntity, res)
+		return
+	}
+
+	dataReq := services.SetNewFolder(req)
+	if res, _ := services.GetFolder(dataReq.ID, models.UserToken.UserID); res == nil {
+		if err := services.AddFolder(dataReq); err != nil {
+			res := helper.Response(true, err.Error(), map[string]interface{}{})
+			c.JSON(http.StatusUnprocessableEntity, res)
+			return
 		}
-		resultF = append(resultF, row)
-	}
-
-	cursorDocument := client.Database(os.Getenv("MONGO_DNS")).Collection("documents")
-	listDocument, err := cursorDocument.Find(ctx, bson.M{
-		"$or": []interface{}{
-			bson.M{"ownerid": userID},
-			bson.M{"share": bson.M{"$in": []uint64{userID}}},
-		},
-	})
-
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	defer listDocument.Close(ctx)
-	var resultD []models.Documents
-	for listDocument.Next(ctx) {
-		var row models.Documents
-		if err := listDocument.Decode(&row); err != nil {
-			log.Fatal(err.Error())
+	} else {
+		if err := services.UpdateFolder(dataReq); err != nil {
+			res := helper.Response(true, err.Error(), map[string]interface{}{})
+			c.JSON(http.StatusUnprocessableEntity, res)
+			return
 		}
-		resultD = append(resultD, row)
 	}
-	return resultF, resultD
+
+	res := helper.Response(false, "folder created", dataReq)
+	c.JSON(http.StatusOK, res)
 }
 
-func GetFolder(ID string, ownerID uint64) (*m.Folder, error) {
-	client := c.MongoInit()
-	ctx := context.Background()
-	defer client.Disconnect(ctx)
-
-	cursor := client.Database(os.Getenv("MONGO_DNS")).Collection("folder")
-	folder := cursor.FindOne(ctx, bson.M{
-		"id":      ID,
-		"ownerid": ownerID,
-	})
-	var result models.Folder
-	err := folder.Decode(&result)
+func DeleteFolder(c *gin.Context) {
+	var req models.Folder
+	if err := c.ShouldBindJSON(&req); err != nil {
+		res := helper.Response(true, err.Error(), map[string]interface{}{})
+		c.JSON(http.StatusUnprocessableEntity, res)
+		return
+	}
+	_, err := services.GetFolder(req.ID, models.UserToken.UserID)
 	if err != nil {
-		return nil, errors.New("folder is not found")
+		res := helper.Response(true, err.Error(), map[string]interface{}{})
+		c.JSON(http.StatusUnprocessableEntity, res)
+		return
 	}
-	return &result, nil
+
+	if err := services.DeleteDocumentFolder(req.ID); err != nil {
+		res := helper.Response(true, err.Error(), map[string]interface{}{})
+		c.JSON(http.StatusUnprocessableEntity, res)
+		return
+	}
+
+	res := helper.Response(false, "Success delete folder", map[string]interface{}{})
+
+	c.JSON(http.StatusOK, res)
 }
 
-func AddFolder(req m.Folder) error {
-	client := c.MongoInit()
-	ctx := context.Background()
-	defer client.Disconnect(ctx)
-	cursor := client.Database(os.Getenv("MONGO_DNS")).Collection("folder")
-
-	_, err := cursor.InsertOne(context.Background(), req)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func UpdateFolder(req m.Folder) error {
-	client := c.MongoInit()
-	ctx := context.Background()
-	defer client.Disconnect(ctx)
-
-	cursor := client.Database(os.Getenv("MONGO_DNS")).Collection("folder")
-	_, err := cursor.UpdateOne(
-		ctx,
-		bson.M{"id": req.ID},
-		bson.M{
-			"$set": bson.M{
-				"name":      req.Name,
-				"timestamp": req.Timestamp,
-			},
-		},
-	)
-
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func DeleteDocumentFolder(ID string) error {
-	client := c.MongoInit()
-	ctx := context.Background()
-	defer client.Disconnect(ctx)
-
-	cursor := client.Database(os.Getenv("MONGO_DNS")).Collection("folder")
-	_, err := cursor.DeleteOne(ctx, bson.M{"id": ID})
-
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func GetDocumentByFolderID(ID string, ownerID uint64, share uint64) []m.Documents {
-	client := c.MongoInit()
-	ctx := context.Background()
-	defer client.Disconnect(ctx)
-	cursor := client.Database(os.Getenv("MONGO_DNS")).Collection("documents")
-
-	listDocument, err := cursor.Find(ctx, bson.M{
-		"folderid": ID,
-		"type":     "document",
-		"$and": []interface{}{
-			bson.M{
-				"$or": []interface{}{
-					bson.M{"ownerid": ownerID},
-					bson.M{"share": bson.M{"$in": []uint64{share}}},
-				},
-			},
-		},
-	})
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	defer listDocument.Close(ctx)
-
-	result := make([]models.Documents, 0)
-	for listDocument.Next(ctx) {
-		var row models.Documents
-		if err := listDocument.Decode(&row); err != nil {
-			log.Fatal(err.Error())
-		}
-		result = append(result, row)
-	}
-	return result
-}
-
-func SetNewFolder(req models.Folder) models.Folder {
-	data := models.Folder{
-		ID:        req.ID,
-		Name:      req.Name,
-		Type:      "folder",
-		IsPublic:  true,
-		OwnerID:   models.UserToken.UserID,
-		Share:     []uint64{},
-		Timestamp: req.Timestamp,
-		CompanyID: models.UserToken.CompanyID,
-	}
-	return data
+func DocumentByFolderID(c *gin.Context) {
+	folderID := c.Param("folder_id")
+	documentList := services.GetDocumentByFolderID(folderID, models.UserToken.UserID, models.UserToken.UserID)
+	res := helper.Response(false, "Success get document", documentList)
+	c.JSON(http.StatusOK, res)
 }

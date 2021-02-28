@@ -1,7 +1,7 @@
 package routers
 
 import (
-	"document-service/services"
+	"document-service/controllers"
 
 	"github.com/gin-gonic/gin"
 )
@@ -9,6 +9,6 @@ import (
 func Root(route *gin.RouterGroup) {
 	root := route.Group("/")
 	{
-		root.GET("", services.GetAll)
+		root.GET("", controllers.GetAll)
 	}
 }

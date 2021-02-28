@@ -1,7 +1,7 @@
 package routers
 
 import (
-	c "document-service/services"
+	c "document-service/controllers"
 	"github.com/gin-gonic/gin"
 )
 

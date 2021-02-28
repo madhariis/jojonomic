@@ -8,13 +8,9 @@ import (
 )
 
 func main() {
+	godotenv.Load(".env")
 	port := os.Getenv("PORT")
 	router := gin.Default()
 	r.Router(router)
 	router.Run(":" + port)
-}
-
-func init() {
-	godotenv.Load(".env")
-	//c.RedisInit()
 }
