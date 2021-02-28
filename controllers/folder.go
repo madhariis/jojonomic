@@ -3,7 +3,7 @@ package controllers
 import (
 	"document-service/helper"
 	"document-service/models"
-	"document-service/services"
+	"document-service/repositories"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -12,7 +12,7 @@ import (
 func GetAll(c *gin.Context) {
 	httpStatus := http.StatusOK
 
-	folderList, documentList := services.GetAll(models.UserToken.UserID)
+	folderList, documentList := repositories.GetAll(models.UserToken.UserID)
 	var result []interface{}
 	for _, resFolder := range folderList {
 		result = append(result, resFolder)
@@ -32,15 +32,15 @@ func SetFolder(c *gin.Context) {
 		return
 	}
 
-	dataReq := services.SetNewFolder(req)
-	if res, _ := services.GetFolder(dataReq.ID, models.UserToken.UserID); res == nil {
-		if err := services.AddFolder(dataReq); err != nil {
+	dataReq := repositories.SetNewFolder(req)
+	if res, _ := repositories.GetFolder(dataReq.ID, models.UserToken.UserID); res == nil {
+		if err := repositories.AddFolder(dataReq); err != nil {
 			res := helper.Response(true, err.Error(), map[string]interface{}{})
 			c.JSON(http.StatusUnprocessableEntity, res)
 			return
 		}
 	} else {
-		if err := services.UpdateFolder(dataReq); err != nil {
+		if err := repositories.UpdateFolder(dataReq); err != nil {
 			res := helper.Response(true, err.Error(), map[string]interface{}{})
 			c.JSON(http.StatusUnprocessableEntity, res)
 			return
@@ -58,14 +58,14 @@ func DeleteFolder(c *gin.Context) {
 		c.JSON(http.StatusUnprocessableEntity, res)
 		return
 	}
-	_, err := services.GetFolder(req.ID, models.UserToken.UserID)
+	_, err := repositories.GetFolder(req.ID, models.UserToken.UserID)
 	if err != nil {
 		res := helper.Response(true, err.Error(), map[string]interface{}{})
 		c.JSON(http.StatusUnprocessableEntity, res)
 		return
 	}
 
-	if err := services.DeleteDocumentFolder(req.ID); err != nil {
+	if err := repositories.DeleteDocumentFolder(req.ID); err != nil {
 		res := helper.Response(true, err.Error(), map[string]interface{}{})
 		c.JSON(http.StatusUnprocessableEntity, res)
 		return
@@ -78,7 +78,7 @@ func DeleteFolder(c *gin.Context) {
 
 func DocumentByFolderID(c *gin.Context) {
 	folderID := c.Param("folder_id")
-	documentList := services.GetDocumentByFolderID(folderID, models.UserToken.UserID, models.UserToken.UserID)
+	documentList := repositories.GetDocumentByFolderID(folderID, models.UserToken.UserID, models.UserToken.UserID)
 	res := helper.Response(false, "Success get document", documentList)
 	c.JSON(http.StatusOK, res)
 }

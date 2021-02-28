@@ -1,6 +1,7 @@
-package helper
+package middleware
 
 import (
+	"document-service/helper"
 	"document-service/models"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -8,9 +9,9 @@ import (
 )
 
 func JwtAuth(c *gin.Context) {
-	res, err := TokenValidation(c.GetHeader("Authorization"), os.Getenv("SECRET_KEY"))
+	res, err := helper.TokenValidation(c.GetHeader("Authorization"), os.Getenv("SECRET_KEY"))
 	if err != nil {
-		res := Response(true, "Unauthorized", map[string]interface{}{})
+		res := helper.Response(true, "Unauthorized", map[string]interface{}{})
 		c.JSON(http.StatusUnauthorized, res)
 		c.Abort()
 		return
